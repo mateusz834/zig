@@ -9376,8 +9376,7 @@ fn builtinCall(
                     std.mem.asBytes(&astgen.source_column),
             );
 
-            const node_start = tree.tokenStart(tree.firstToken(node));
-            astgen.advanceSourceCursor(node_start);
+            astgen.advanceSourceCursorToNode(node);
             const result = try gz.addExtendedPayload(.builtin_src, Zir.Inst.Src{
                 .node = gz.nodeIndexToRelative(node),
                 .line = astgen.source_line,
@@ -13364,9 +13363,7 @@ const LineColumn = struct { u32, u32 };
 fn maybeAdvanceSourceCursorToMainToken(gz: *GenZir, node: Ast.Node.Index) LineColumn {
     if (gz.is_comptime) return .{ gz.astgen.source_line - gz.decl_line, gz.astgen.source_column };
 
-    const tree = gz.astgen.tree;
-    const node_start = tree.tokenStart(tree.nodeMainToken(node));
-    gz.astgen.advanceSourceCursor(node_start);
+    gz.astgen.advanceSourceCursorToNode(node);
 
     return .{ gz.astgen.source_line - gz.decl_line, gz.astgen.source_column };
 }
