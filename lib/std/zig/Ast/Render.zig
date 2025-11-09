@@ -1479,7 +1479,12 @@ fn renderContainerField(
     const tree = r.tree;
     const ais = r.ais;
     var field = field_param;
-    if (container != .tuple) field.convertToNonTupleLike(&tree);
+
+    const type_expr_opt, const tuple_like = if (container != .tuple and field.ast.tuple_like and tree.nodeTag(field.ast.type_expr.unwrap().?) == .identifier) tuple_like: {
+        assert(field.ast.main_token == tree.nodeMainToken(field.ast.type_expr.unwrap().?));
+        break :tuple_like .{ null, false };
+    } else .{ field.ast.type_expr.unwrap().?, field.ast.tuple_like };
+
     const quote: QuoteBehavior = switch (container) {
         .@"enum" => .eagerly_unquote_except_underscore,
         .tuple, .other => .eagerly_unquote,
@@ -1488,7 +1493,7 @@ fn renderContainerField(
     if (field.comptime_token) |t| {
         try renderToken(r, t, .space); // comptime
     }
-    if (field.ast.type_expr == .none and field.ast.value_expr == .none) {
+    if (type_expr_opt == null and field.ast.value_expr == .none) {
         if (field.ast.align_expr.unwrap()) |align_expr| {
             try renderIdentifier(r, field.ast.main_token, .space, quote); // name
             const lparen_token = tree.firstToken(align_expr) - 1;
@@ -1501,9 +1506,9 @@ fn renderContainerField(
         }
         return renderIdentifierComma(r, field.ast.main_token, space, quote); // name
     }
-    if (field.ast.type_expr != .none and field.ast.value_expr == .none) {
-        const type_expr = field.ast.type_expr.unwrap().?;
-        if (!field.ast.tuple_like) {
+    if (type_expr_opt != null and field.ast.value_expr == .none) {
+        const type_expr = type_expr_opt.?;
+        if (!tuple_like) {
             try renderIdentifier(r, field.ast.main_token, .none, quote); // name
             try renderToken(r, field.ast.main_token + 1, .space); // :
         }
@@ -1520,7 +1525,7 @@ fn renderContainerField(
             return renderExpressionComma(r, type_expr, space); // type
         }
     }
-    if (field.ast.type_expr == .none and field.ast.value_expr != .none) {
+    if (type_expr_opt == null and field.ast.value_expr != .none) {
         const value_expr = field.ast.value_expr.unwrap().?;
 
         try renderIdentifier(r, field.ast.main_token, .space, quote); // name
@@ -1536,12 +1541,12 @@ fn renderContainerField(
         try renderToken(r, field.ast.main_token + 1, .space); // =
         return renderExpressionComma(r, value_expr, space); // value
     }
-    if (!field.ast.tuple_like) {
+    if (!tuple_like) {
         try renderIdentifier(r, field.ast.main_token, .none, quote); // name
         try renderToken(r, field.ast.main_token + 1, .space); // :
     }
 
-    const type_expr = field.ast.type_expr.unwrap().?;
+    const type_expr = type_expr_opt.?;
     const value_expr = field.ast.value_expr.unwrap().?;
 
     try renderExpression(r, type_expr, .space); // type

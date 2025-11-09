@@ -5367,10 +5367,24 @@ fn unionDeclInner(
             .field => |field| field,
         };
         astgen.src_hasher.update(astgen.tree.getNodeSource(member_node));
-        member.convertToNonTupleLike(astgen.tree);
-        if (member.ast.tuple_like) {
-            return astgen.failTok(member.ast.main_token, "union field missing name", .{});
-        }
+
+        const type_expr_opt = if (member.ast.tuple_like) type_expr_opt: {
+            if (astgen.tree.nodeTag(member.ast.type_expr.unwrap().?) == .identifier) {
+                // union {
+                //     field
+                // }
+                assert(member.ast.main_token == astgen.tree.nodeMainToken(member.ast.type_expr.unwrap().?));
+                break :type_expr_opt null;
+            } else {
+                // Not an identifier, so this is likely a type.
+                //
+                // union {
+                //     *u32
+                // }
+                return astgen.failTok(member.ast.main_token, "union field missing name", .{});
+            }
+        } else member.ast.type_expr.unwrap().?;
+
         if (member.comptime_token) |comptime_token| {
             return astgen.failTok(comptime_token, "union fields cannot be marked comptime", .{});
         }
@@ -5378,13 +5392,13 @@ fn unionDeclInner(
         const field_name = try astgen.identAsString(member.ast.main_token);
         wip_members.appendToField(@intFromEnum(field_name));
 
-        const have_type = member.ast.type_expr != .none;
+        const have_type = type_expr_opt != null;
         const have_align = member.ast.align_expr != .none;
         const have_value = member.ast.value_expr != .none;
         const unused = false;
         wip_members.nextField(bits_per_field, .{ have_type, have_align, have_value, unused });
 
-        if (member.ast.type_expr.unwrap()) |type_expr| {
+        if (type_expr_opt) |type_expr| {
             const field_type = try typeExpr(&block_scope, &namespace.base, type_expr);
             wip_members.appendToField(@intFromEnum(field_type));
         } else if (arg_inst == .none and auto_enum_tok == null) {
@@ -5526,14 +5540,28 @@ fn containerDecl(
                         decls += 1;
                         continue;
                     };
-                    member.convertToNonTupleLike(astgen.tree);
-                    if (member.ast.tuple_like) {
-                        return astgen.failTok(member.ast.main_token, "enum field missing name", .{});
-                    }
+
+                    const type_expr_opt = if (member.ast.tuple_like) type_expr_opt: {
+                        if (astgen.tree.nodeTag(member.ast.type_expr.unwrap().?) == .identifier) {
+                            // enum {
+                            //     field
+                            // }
+                            assert(member.ast.main_token == tree.nodeMainToken(member.ast.type_expr.unwrap().?));
+                            break :type_expr_opt null;
+                        } else {
+                            // Not an identifier, so this is likely a type.
+                            //
+                            // enum {
+                            //     *u32
+                            // }
+                            return astgen.failTok(member.ast.main_token, "enum field missing name", .{});
+                        }
+                    } else member.ast.type_expr.unwrap().?;
+
                     if (member.comptime_token) |comptime_token| {
                         return astgen.failTok(comptime_token, "enum fields cannot be marked comptime", .{});
                     }
-                    if (member.ast.type_expr.unwrap()) |type_expr| {
+                    if (type_expr_opt) |type_expr| {
                         return astgen.failNodeNotes(
                             type_expr,
                             "enum fields do not have types",
@@ -5666,9 +5694,9 @@ fn containerDecl(
                     .decl => continue,
                     .field => |field| field,
                 };
-                member.convertToNonTupleLike(astgen.tree);
+
                 assert(member.comptime_token == null);
-                assert(member.ast.type_expr == .none);
+                assert(member.ast.tuple_like and astgen.tree.nodeTag(member.ast.type_expr.unwrap().?) == .identifier);
                 assert(member.ast.align_expr == .none);
 
                 const field_name = try astgen.identAsString(member.ast.main_token);
@@ -13462,7 +13490,15 @@ fn scanContainer(
                 var full = tree.fullContainerField(member_node).?;
                 switch (container_kind) {
                     .@"struct", .@"opaque" => {},
-                    .@"union", .@"enum" => full.convertToNonTupleLike(astgen.tree),
+                    .@"union", .@"enum" => {
+                        if (full.ast.tuple_like and astgen.tree.nodeTag(full.ast.type_expr.unwrap().?) == .identifier) {
+                            // union {
+                            //     field
+                            // }
+                            assert(full.ast.main_token == tree.nodeMainToken(full.ast.type_expr.unwrap().?));
+                            full.ast.tuple_like = false;
+                        }
+                    },
                 }
                 if (full.ast.tuple_like) continue;
                 break :blk .{ .field, full.ast.main_token };
