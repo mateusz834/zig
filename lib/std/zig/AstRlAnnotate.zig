@@ -155,7 +155,7 @@ fn expr(astrl: *AstRlAnnotate, node: Ast.Node.Index, block: ?*Block, ri: ResultI
         .container_field,
         => {
             const full = tree.fullContainerField(node).?;
-            const type_expr = full.ast.type_expr.unwrap().?;
+            const type_expr = full.ast.type_expr;
             _ = try astrl.expr(type_expr, block, ResultInfo.type_only);
             if (full.ast.align_expr.unwrap()) |align_expr| {
                 _ = try astrl.expr(align_expr, block, ResultInfo.type_only);

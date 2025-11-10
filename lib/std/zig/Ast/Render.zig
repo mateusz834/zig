@@ -1480,10 +1480,10 @@ fn renderContainerField(
     const ais = r.ais;
     var field = field_param;
 
-    const type_expr_opt, const tuple_like = if (container != .tuple and field.ast.tuple_like and tree.nodeTag(field.ast.type_expr.unwrap().?) == .identifier) tuple_like: {
-        assert(field.ast.main_token == tree.nodeMainToken(field.ast.type_expr.unwrap().?));
+    const type_expr_opt, const tuple_like = if (container != .tuple and field.ast.tuple_like and tree.nodeTag(field.ast.type_expr) == .identifier) tuple_like: {
+        assert(field.ast.main_token == tree.nodeMainToken(field.ast.type_expr));
         break :tuple_like .{ null, false };
-    } else .{ field.ast.type_expr.unwrap().?, field.ast.tuple_like };
+    } else .{ field.ast.type_expr, field.ast.tuple_like };
 
     const quote: QuoteBehavior = switch (container) {
         .@"enum" => .eagerly_unquote_except_underscore,

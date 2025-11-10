@@ -2016,7 +2016,7 @@ pub const SrcLoc = struct {
                     const field_component_node = switch (src_loc.lazy) {
                         .container_field_name => .none,
                         .container_field_value => field.ast.value_expr,
-                        .container_field_type => field.ast.type_expr,
+                        .container_field_type => field.ast.type_expr.toOptional(),
                         .container_field_align => field.ast.align_expr,
                         else => unreachable,
                     };
@@ -2036,7 +2036,7 @@ pub const SrcLoc = struct {
 
                 const field = tree.fullContainerField(container_decl.ast.members[field_info.elem_index]).?;
                 return tree.nodeToSpan(switch (src_loc.lazy) {
-                    .tuple_field_type => field.ast.type_expr.unwrap().?,
+                    .tuple_field_type => field.ast.type_expr,
                     .tuple_field_init => field.ast.value_expr.unwrap().?,
                     else => unreachable,
                 });

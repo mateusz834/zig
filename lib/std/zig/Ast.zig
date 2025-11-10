@@ -1417,7 +1417,7 @@ pub fn containerField(tree: Ast, node: Node.Index) full.ContainerField {
     const main_token = tree.nodeMainToken(node);
     return tree.fullContainerFieldComponents(.{
         .main_token = main_token,
-        .type_expr = type_expr.toOptional(),
+        .type_expr = type_expr,
         .align_expr = extra.align_expr.toOptional(),
         .value_expr = extra.value_expr.toOptional(),
         .tuple_like = tree.tokenTag(main_token) != .identifier or
@@ -1431,7 +1431,7 @@ pub fn containerFieldInit(tree: Ast, node: Node.Index) full.ContainerField {
     const main_token = tree.nodeMainToken(node);
     return tree.fullContainerFieldComponents(.{
         .main_token = main_token,
-        .type_expr = type_expr.toOptional(),
+        .type_expr = type_expr,
         .align_expr = .none,
         .value_expr = value_expr,
         .tuple_like = tree.tokenTag(main_token) != .identifier or
@@ -1445,7 +1445,7 @@ pub fn containerFieldAlign(tree: Ast, node: Node.Index) full.ContainerField {
     const main_token = tree.nodeMainToken(node);
     return tree.fullContainerFieldComponents(.{
         .main_token = main_token,
-        .type_expr = type_expr.toOptional(),
+        .type_expr = type_expr,
         .align_expr = align_expr.toOptional(),
         .value_expr = .none,
         .tuple_like = tree.tokenTag(main_token) != .identifier or
@@ -2621,8 +2621,7 @@ pub const full = struct {
 
         pub const Components = struct {
             main_token: TokenIndex,
-            /// Can only be `.none` after calling `convertToNonTupleLike`.
-            type_expr: Node.OptionalIndex,
+            type_expr: Node.Index,
             align_expr: Node.OptionalIndex,
             value_expr: Node.OptionalIndex,
             tuple_like: bool,
@@ -2630,14 +2629,6 @@ pub const full = struct {
 
         pub fn firstToken(cf: ContainerField) TokenIndex {
             return cf.comptime_token orelse cf.ast.main_token;
-        }
-
-        pub fn convertToNonTupleLike(cf: *ContainerField, tree: *const Ast) void {
-            if (!cf.ast.tuple_like) return;
-            if (tree.nodeTag(cf.ast.type_expr.unwrap().?) != .identifier) return;
-
-            cf.ast.type_expr = .none;
-            cf.ast.tuple_like = false;
         }
     };
 
