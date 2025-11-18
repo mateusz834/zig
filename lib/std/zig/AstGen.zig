@@ -57,9 +57,11 @@ imports: std.AutoArrayHashMapUnmanaged(Zir.NullTerminatedString, Ast.TokenIndex)
 scratch: std.ArrayListUnmanaged(u32) = .empty,
 /// Whenever a `ref` instruction is needed, it is created and saved in this
 /// table instead of being immediately appended to the current block body.
-/// Then, when the instruction is being added to the parent block (typically from
-/// setBlockBody), if it has a ref_table entry, then the ref instruction is added
-/// there. This makes sure two properties are upheld:
+/// Then, when the instruction is being added to the parent block (which may not be
+/// the immediate parent) (typically from setBlockBody), if it has a ref_table entry,
+/// then the ref instruction is added there i.e., the ref instruction is inserted
+/// into the block that contains the referenced operand.
+/// This makes sure two properties are upheld:
 /// 1. All pointers to the same locals return the same address. This is required
 ///    to be compliant with the language specification.
 /// 2. `ref` instructions will dominate their uses. This is a required property
@@ -11114,6 +11116,10 @@ fn rvalueInner(
             return .void_value;
         },
         .ref, .ref_coerced_ty => {
+            const astgen = gz.astgen;
+            const tree = astgen.tree;
+            const src_token = tree.firstToken(src_node);
+
             const coerced_result = if (allow_coerce_pre_ref and ri.rl == .ref_coerced_ty) res: {
                 const ptr_ty = ri.rl.ref_coerced_ty;
                 break :res try gz.addPlNode(.coerce_ptr_elem_ty, src_node, Zir.Inst.Bin{
@@ -11121,20 +11127,23 @@ fn rvalueInner(
                     .rhs = result,
                 });
             } else result;
-            // We need a pointer but we have a value.
-            // Unfortunately it's not quite as simple as directly emitting a ref
-            // instruction here because we need subsequent address-of operator on
-            // const locals to return the same address.
-            const astgen = gz.astgen;
-            const tree = astgen.tree;
-            const src_token = tree.firstToken(src_node);
-            const result_index = coerced_result.toIndex() orelse
+
+            if (coerced_result.toIndex()) |result_index| {
+                // We need a pointer but we have a value.
+                // Unfortunately it's not quite as simple as directly emitting a ref
+                // instruction here because we need subsequent address-of operator on
+                // const locals to return the same address.
+                // Also see the doc comment of `astgen.ref_table` for more details.
+                const gop = try astgen.ref_table.getOrPut(astgen.gpa, result_index);
+                if (!gop.found_existing) {
+                    gop.value_ptr.* = try gz.makeUnTok(.ref, coerced_result, src_token);
+                }
+                return gop.value_ptr.*.toRef();
+            } else {
+                // No need to do anything fancy here, `coerced_result` is a constant value,
+                // not a local variable, so we can insert the ref to the current block.
                 return gz.addUnTok(.ref, coerced_result, src_token);
-            const gop = try astgen.ref_table.getOrPut(astgen.gpa, result_index);
-            if (!gop.found_existing) {
-                gop.value_ptr.* = try gz.makeUnTok(.ref, coerced_result, src_token);
             }
-            return gop.value_ptr.*.toRef();
         },
         .ty => |ty_inst| {
             // Quickly eliminate some common, unnecessary type coercion.
