@@ -11120,15 +11120,18 @@ fn rvalueInner(
             const tree = astgen.tree;
             const src_token = tree.firstToken(src_node);
 
-            const coerced_result = if (allow_coerce_pre_ref and ri.rl == .ref_coerced_ty) res: {
+            if (allow_coerce_pre_ref and ri.rl == .ref_coerced_ty) {
                 const ptr_ty = ri.rl.ref_coerced_ty;
-                break :res try gz.addPlNode(.coerce_ptr_elem_ty, src_node, Zir.Inst.Bin{
+                const coerced_result = try gz.addPlNode(.coerce_ptr_elem_ty, src_node, Zir.Inst.Bin{
                     .lhs = ptr_ty,
                     .rhs = result,
                 });
-            } else result;
+                // No need to store the operand in `astgen.ref_table`, since the `coerced_result`
+                // is in the current block, so we can insert the ref immediately.
+                return gz.addUnTok(.ref, coerced_result, src_token);
+            }
 
-            if (coerced_result.toIndex()) |result_index| {
+            if (result.toIndex()) |result_index| {
                 // We need a pointer but we have a value.
                 // Unfortunately it's not quite as simple as directly emitting a ref
                 // instruction here because we need subsequent address-of operator on
@@ -11136,13 +11139,13 @@ fn rvalueInner(
                 // Also see the doc comment of `astgen.ref_table` for more details.
                 const gop = try astgen.ref_table.getOrPut(astgen.gpa, result_index);
                 if (!gop.found_existing) {
-                    gop.value_ptr.* = try gz.makeUnTok(.ref, coerced_result, src_token);
+                    gop.value_ptr.* = try gz.makeUnTok(.ref, result, src_token);
                 }
                 return gop.value_ptr.*.toRef();
             } else {
-                // No need to do anything fancy here, `coerced_result` is a constant value,
+                // No need to do anything fancy here, `result` is a constant value,
                 // not a local variable, so we can insert the ref to the current block.
-                return gz.addUnTok(.ref, coerced_result, src_token);
+                return gz.addUnTok(.ref, result, src_token);
             }
         },
         .ty => |ty_inst| {
